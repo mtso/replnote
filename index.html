@@ -1,0 +1,158 @@
+<!doctype html>
+<html>
+  <head>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.25.2/codemirror.min.css" rel="stylesheet" />
+    <link href="https://codemirror.net/doc/docs.css" rel="stylesheet" />
+    <link href="https://codemirror.net/lib/codemirror.css" rel="stylesheet" />
+    <script src="https://codemirror.net/addon/mode/overlay.js"></script>
+    <script src="https://codemirror.net/mode/xml/xml.js"></script>
+    <script src="https://codemirror.net/mode/markdown/markdown.js"></script>
+    <script src="https://codemirror.net/lib/codemirror.js"></script>
+    <script src="https://codemirror.net/mode/gfm/gfm.js"></script>
+    <script src="https://codemirror.net/mode/javascript/javascript.js"></script>
+    <script src="https://codemirror.net/mode/css/css.js"></script>
+    <script src="https://codemirror.net/mode/htmlmixed/htmlmixed.js"></script>
+    <script src="https://codemirror.net/mode/clike/clike.js"></script>
+    <script src="https://codemirror.net/mode/meta.js"></script>
+    
+    <style>
+    html, body {
+      margin: 0;
+    }
+
+    .CodeMirror {
+    /*   border: 1px solid #eee; */
+      height: auto;
+    }
+    </style>
+  </head>
+  <body>
+    <div id="mount"></div>
+  
+    <script>
+    var enclosedEval = (function(code) {
+      // Prevent code from access global scope
+      // console.log(code)
+      const oglog = console.log
+      const window = {}
+
+      console.log = function() {
+        const args = Array.prototype.slice.call(arguments)
+        return args.join(' ')
+      }
+      return eval(code)
+    })
+
+    const initialValue = `abc
+    \`\`\`js
+    console.log("hi~");
+    42
+    \`\`\`
+    456`
+
+    var editor = CodeMirror(document.querySelector('#mount'), {
+      value: initialValue,
+      lineNumbers: true,
+      mode: 'gfm',
+      matchBrackets: true,
+      theme: 'default',
+      viewportMargin: Infinity,
+    })
+
+    function getLineForIndex(cm) {
+      return function(ch) {
+        const content = cm.getValue() || ''
+
+        const lines = content.split('\n')
+        let lineNumber = -1
+        let position = ch + 1
+
+        while (position > 0) {
+          const line = lines.shift()
+
+          position -= (line.length + 1)
+          lineNumber += 1
+        }
+
+        return lineNumber
+      }
+    }
+
+    editor.on('change', onChange)
+
+    const codePattern = /(```)(\w+)?\s((?:(?!```).*\n)*)(```)/g
+
+    function renderLog(output) {
+      const node = document.createElement('div')
+      const runButton = document.createElement('button')
+      const display = document.createElement('div')
+
+      node.appendChild(display)
+      node.appendChild(runButton)
+
+      display.innerText = '// click "run" to view output'// output
+      display.style.backgroundColor = 'lightgray'
+      display.style.padding = '5px'
+      // node.style.height = '20px'
+
+      runButton.innerText = 'run'
+      runButton.style.float = 'right'
+      runButton.style.position = 'absolute'
+      runButton.style.top = '0'
+      runButton.style.right = '0'
+
+      // node.appendChild(runButton)
+
+      var _widget
+      node.registerWidget = function(w) {
+        _widget = w
+      }
+
+      runButton.addEventListener('click', function(e) {
+        const result = enclosedEval(output)
+        display.innerText = result // output
+        if (_widget) { _widget.changed() }
+      })
+
+      return node
+    }
+
+    const widgets = []
+
+    function registerBlocks(doc) {
+      while (widgets.length > 0) { widgets.pop().clear() }
+
+      const value = doc.getValue()
+
+      var match
+      while (match = codePattern.exec(value)) {
+        const startIndex = match.index
+        const type = match[2] || ''
+        const code = match[3]
+
+        if (type.toLowerCase() != 'js' && type.toLowerCase() != 'javascript') { continue }
+
+        const startLine = getLineForIndex(doc)(startIndex) 
+        const endLine = startLine + code.split('\n').length
+
+        const node = renderLog(code)
+
+        const w = doc.addLineWidget(
+          endLine,
+          node
+        )
+
+        node.registerWidget(w)
+
+        widgets.push(w)
+      }
+    }
+
+    function onChange(instance, change) {
+      registerBlocks(instance.doc)
+    }
+
+    registerBlocks(editor)
+    </script>
+  </body>
+</html>
